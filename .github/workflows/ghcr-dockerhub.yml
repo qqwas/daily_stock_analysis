@@ -14,16 +14,14 @@ concurrency:
 
 env:
   GHCR_REGISTRY: ghcr.io
-  DOCKERHUB_REGISTRY: docker.io
-  GHCR_IMAGE_NAME: ${{ github.repository }}
-  DOCKERHUB_IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+  GHCR_IMAGE_NAME: ${{ github.repository }}   # 自动使用当前仓库名 owner/repo
 
 jobs:
   build-and-push:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      packages: write
+      packages: write          # 推送 GHCR 必需
       id-token: write
 
     steps:
@@ -49,7 +47,7 @@ jobs:
       - name: Set up QEMU for multi-platform build
         uses: docker/setup-qemu-action@v3
 
-      # 登录到 GHCR
+      # 仅登录 GHCR（使用 GITHUB_TOKEN 自动认证）
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -57,14 +55,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 登录到 Docker Hub（需要预先设置 secrets.DOCKERHUB_USERNAME 和 secrets.DOCKERHUB_TOKEN）
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKERHUB_REGISTRY }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
+      # 为 GHCR 生成元数据（标签等）
       - name: Extract metadata for GHCR
         id: meta-ghcr
         uses: docker/metadata-action@v5
@@ -76,54 +67,29 @@ jobs:
           flavor: |
             latest=false
 
-      - name: Extract metadata for Docker Hub
-        id: meta-dockerhub
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ inputs.image_tag }}
-            type=raw,value=latest
-          flavor: |
-            latest=false
-
-      - name: Pre-publish docker smoke
-        run: |
-          docker build -t stock-analysis:manual -f docker/Dockerfile .
-          docker run --rm stock-analysis:manual python -c "
-          from src.config import get_config; print('ok-config')
-          from src.storage import DatabaseManager; print('ok-storage')
-          from src.notification import NotificationService; print('ok-notification')
-          from data_provider import DataFetcherManager; print('ok-data-provider')
-          from src.analyzer import GeminiAnalyzer; print('ok-analyzer')
-          print('manual-smoke-ok')
-          "
-
+      # 构建并推送多架构镜像（只推送到 GHCR）
       - name: Build and push multi-arch images
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          file: docker/Dockerfile     # 请改成你的 Dockerfile 路径
+          platforms: linux/amd64
           push: true
-          tags: |
-            ${{ steps.meta-ghcr.outputs.tags }}
-            ${{ steps.meta-dockerhub.outputs.tags }}
+          tags: ${{ steps.meta-ghcr.outputs.tags }}   # 只使用 GHCR 的标签
           labels: ${{ steps.meta-ghcr.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # 生成摘要信息（只显示 GHCR）
       - name: Generate summary
         run: |
           echo "### Docker images built and pushed successfully" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- GHCR: \`${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Docker Hub: \`${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tags: ${{ inputs.image_tag }}, latest" >> "$GITHUB_STEP_SUMMARY"
           echo "- Platforms: linux/amd64, linux/arm64" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Pull commands" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Pull command" >> "$GITHUB_STEP_SUMMARY"
           echo '```bash' >> "$GITHUB_STEP_SUMMARY"
           echo "docker pull ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}:${{ inputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "docker pull ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}:${{ inputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
