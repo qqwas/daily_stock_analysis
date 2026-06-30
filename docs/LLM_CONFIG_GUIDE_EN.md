@@ -48,6 +48,7 @@ AGENT_GENERATION_BACKEND=auto
 - Docker, cloud servers, and CI do not automatically have your local CLI login state.
 - GitHub Actions only passes configuration values through; it does not install or log in Codex CLI. If you opt into `GENERATION_BACKEND=codex_cli` in Actions, a runner without the executable or login state should return a structured failure.
 - DSA does not read Codex credential files, but the subprocess may use the CLI's own login state.
+- On macOS, desktop apps launched from Finder/Dock do not inherit the shell PATH. The packaged desktop app adds common Homebrew directories such as `/opt/homebrew/bin` and `/usr/local/bin` when starting the backend. If setup checks still cannot find `codex`, fully quit and reopen DSA; opening an interactive `codex` window does not change the already-running backend PATH.
 - The Web settings page only exposes safe presets; it does not accept arbitrary command, argv, or shell strings.
 - `codex_cli` remains experimental/limited. If your CLI version does not support stable non-interactive `--output-last-message` output, keep `GENERATION_BACKEND=litellm`.
 
@@ -210,6 +211,18 @@ LLM_OLLAMA_MODELS=qwen3:8b,llama3.2
 # 3. Specify primary model
 LITELLM_MODEL=ollama/qwen3:8b
 ```
+
+### Example: Hermes Local HTTP Generation (Phase 3)
+```env
+LLM_CHANNELS=hermes
+LLM_HERMES_PROTOCOL=openai
+LLM_HERMES_BASE_URL=http://127.0.0.1:8642/v1
+LLM_HERMES_API_KEY=sk-local-hermes
+LLM_HERMES_MODELS=hermes-agent
+LITELLM_MODEL=openai/hermes-agent
+```
+
+`hermes` is a reserved channel name for local loopback `/v1` OpenAI-compatible generation. Phase 3 only verifies regular analysis and JSON output. It does not support Stream/SSE, tools, Vision, Agent tools, remote Hermes, or process lifecycle management. Use exactly one `LLM_HERMES_API_KEY`; do not configure `LLM_HERMES_API_KEYS` or `LLM_HERMES_EXTRA_HEADERS`. If enabled Hermes config is invalid, DSA blocks legacy provider silent fallback so requests do not unexpectedly switch to an external model. When the Web settings page saves the reserved Hermes channel, it explicitly clears stale `LLM_HERMES_API_KEYS` / `LLM_HERMES_EXTRA_HEADERS` values and returns a warning. To recover previous values, restore them from a `.env` backup, Git history, or a desktop export backup, but Phase 3 will still reject non-empty multi-key or extra-header Hermes settings.
 
 ### MiniMax Model Naming in Channel Mode
 

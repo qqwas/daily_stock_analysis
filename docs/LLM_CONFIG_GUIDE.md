@@ -55,6 +55,7 @@ AGENT_GENERATION_BACKEND=auto
 - Docker、云服务器、CI 不天然拥有你本机的 CLI 登录态。
 - GitHub Actions 只负责透传配置值，不安装或登录 Codex CLI；如果在 Actions 中 opt-in `GENERATION_BACKEND=codex_cli`，runner 上缺少可执行文件或登录态时应看到结构化失败。
 - DSA 不读取 Codex credential 文件，但子进程可能读取 CLI 自身登录态。
+- macOS 从 Finder/Dock 启动桌面端时不继承 shell PATH；打包桌面端会在启动后端时补入常见 Homebrew 路径（如 `/opt/homebrew/bin`、`/usr/local/bin`）。如果设置检查仍提示找不到 `codex`，请完全退出并重开 DSA；打开 `codex` 交互窗口不会改变已运行后端的 PATH。
 - Web 设置页只暴露安全 preset，不允许提交任意 command / argv / shell string。
 - `codex_cli` 仍标记为 experimental/limited；如果你的 CLI 版本不支持稳定的 `--output-last-message` 非交互输出，请保持 `GENERATION_BACKEND=litellm`。
 
@@ -217,6 +218,18 @@ LLM_OLLAMA_MODELS=qwen3:8b,llama3.2
 # 3. 指定主模型
 LITELLM_MODEL=ollama/qwen3:8b
 ```
+
+### 示例：Hermes 本地 HTTP Generation（Phase 3）
+```env
+LLM_CHANNELS=hermes
+LLM_HERMES_PROTOCOL=openai
+LLM_HERMES_BASE_URL=http://127.0.0.1:8642/v1
+LLM_HERMES_API_KEY=sk-local-hermes
+LLM_HERMES_MODELS=hermes-agent
+LITELLM_MODEL=openai/hermes-agent
+```
+
+Hermes 是保留渠道名，只支持本机 loopback `/v1` OpenAI-compatible generation。Phase 3 只验证普通分析与 JSON 输出；不支持 Stream/SSE、Tools、Vision、Agent tools、远程 Hermes 或进程生命周期管理。Hermes API Key 只能使用单个 `LLM_HERMES_API_KEY`，不要配置 `LLM_HERMES_API_KEYS` 或 `LLM_HERMES_EXTRA_HEADERS`。如果 Hermes 配置非法，系统会阻止 legacy provider silent fallback，避免错误地改用外部模型。Web 设置页保存 reserved Hermes 渠道时，会显式清空旧的 `LLM_HERMES_API_KEYS` / `LLM_HERMES_EXTRA_HEADERS` 并返回 warning；如需恢复旧值，请从 `.env` 备份、Git 历史或桌面端导出备份手动还原，但 Phase 3 仍会拒绝非空的多 Key / Extra Headers 配置。
 
 ### MiniMax 渠道模型填写说明
 
